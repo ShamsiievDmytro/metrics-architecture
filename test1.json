@@ -3,5 +3,11 @@
   "role": "engineer",
   "age": 30,
   "skills": ["python", "javascript", "docker"],
-  "location": "Berlin"
+  "location": "Berlin",
+  "experience": {
+    "company": "Tech Solutions",
+    "position": "Senior Developer",
+    "years": 5
+  },
+  "team": "platform"
 }
