@@ -1,0 +1,23 @@
+test1.json
+  a32eb39a046df3b9 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "5e01da8cba2d06a2f100973df85b8ad1298e967a",
+  "prompts": {
+    "a32eb39a046df3b9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "89609cfb-7f74-46ed-9415-e49b4d2ae162",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Dmytro Shamsiiev",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 53,
+      "overriden_lines": 0
+    }
+  }
+}
