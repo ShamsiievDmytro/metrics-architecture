@@ -10,5 +10,6 @@
     "years": 5
   },
   "team": "platform",
-  "verified": true
+  "verified": true,
+  "stage": "no-hookspath"
 }
