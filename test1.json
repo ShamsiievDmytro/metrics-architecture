@@ -11,5 +11,5 @@
   },
   "team": "platform",
   "verified": true,
-  "stage": "hard-restart"
+  "stage": "retry"
 }
