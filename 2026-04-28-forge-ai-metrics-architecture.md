@@ -67,7 +67,8 @@ The script is idempotent — it:
 3. Deploys `enrich-and-post.sh` to `~/.forge-ai/` (always overwrites with latest)
 4. Sets `post_notes_updated` hook (replaces if exists, preserves other git-ai config)
 5. Sets `prompt_storage local` (idempotent)
-6. Verifies setup and prints status
+6. Restarts the git-ai background daemon (`git-ai bg restart`) so the new hook + feature flag take effect
+7. Verifies daemon is running and prints status
 
 **Re-running is the upgrade path.** When we fix something in the enrichment script, update the wrapper, or git-ai releases a new version — developers re-run the same command. The script handles everything.
 
@@ -89,6 +90,18 @@ git-ai config set feature_flags.git_hooks_enabled true   # off by default in 1.3
 ```
 
 The `git_hooks_enabled` feature flag must be on or the hook is silently inert.
+
+### Why the setup script restarts the daemon
+
+The git-ai background service reads `~/.git-ai/config.json` at startup and caches it in memory. Newly registered hooks (`git_ai_hooks.post_notes_updated`) and toggled feature flags (`feature_flags.git_hooks_enabled`) **do not take effect until the daemon restarts**. The setup script ends with `git-ai bg restart` for this reason. Skipping the restart is the most common cause of "the script ran but my hook never fires" — observed during validation on 2026-04-28.
+
+### How the hook is delivered (no per-repo install)
+
+The hook is fired by the git-ai daemon, not by per-repo `.git/hooks/` stubs. Commits go through the git-ai wrapper (`~/.git-ai/bin/git`, which `git-ai install-hooks` puts ahead on `PATH` for installed coding agents). The wrapper records the commit, the daemon writes the AI note, and **then** the daemon dispatches `post_notes_updated`. As a result:
+
+- Setup is **per-developer, global** — one `curl … | bash` covers every repo on that machine.
+- No `core.hooksPath` is set on individual repos.
+- `git-ai install-hooks` is part of the upstream installer; the Forge AI setup script does not need to call it per repo.
 
 ### How attribution is computed
 
@@ -340,10 +353,11 @@ The entire system is designed around **re-runnability**:
 | Change | Developer action | What happens |
 |---|---|---|
 | Enrichment script updated | Re-run setup command | Script overwritten with latest |
-| Git-ai new version | Re-run setup command | Script updates git-ai + re-applies hook |
-| API URL changes | Re-run setup command | Config updated |
+| Git-ai new version | Re-run setup command | Script updates git-ai + re-applies hook + restarts daemon |
+| API URL changes | Re-run setup command | Config updated, daemon restarted to pick up changes |
 | Git-ai fixes Codex/Cursor natively | Re-run setup command | Script detects new note format, adjusts |
 | `post_notes_updated` payload adds new fields | Re-run setup command | Enrichment script updated to use native fields |
+| Hook registered but not firing | Re-run setup command | Daemon restart (last step) reloads cached config |
 | Developer changes machine | Run setup command on new machine | Fresh install |
 
 ### Server-side
@@ -434,7 +448,7 @@ The enrichment pipeline was tested end-to-end on 2026-04-28. All payloads receiv
 
 **9.5 Multi-agent conflict.** When multiple agents are active, the first agent's checkpoint claims file changes. Wrong tool may be credited.
 
-**9.6 `post_notes_updated` hook stability.** Not prominently documented by git-ai. Behavior may change in future versions. The enrichment script abstracts this — updates deploy via re-running the setup command.
+**9.6 `post_notes_updated` hook stability.** Not prominently documented by git-ai. Behavior may change in future versions. The enrichment script abstracts this — updates deploy via re-running the setup command. Also: the daemon caches `~/.git-ai/config.json` in memory at startup, so any change to `git_ai_hooks.*` or `feature_flags.git_hooks_enabled` requires a `git-ai bg restart` before it takes effect (the setup script does this automatically; manual edits do not).
 
 **9.7 3 retries, then data lost.** If the API is down for extended periods, commits during that time are not recovered. Acceptable for v1.
 

@@ -125,6 +125,21 @@ git-ai config set feature_flags.git_hooks_enabled true
 # Spec §1 step 5: prompt_storage local. Idempotent — `set` overwrites.
 git-ai config set prompt_storage local
 
+# --- restart daemon so config changes are picked up ---
+# The git-ai background service reads ~/.git-ai/config.json at startup and
+# caches it in memory. Hook registrations and feature flags written above
+# will NOT take effect until the daemon is restarted. `bg restart` is safe
+# to run on a fresh install — it starts the daemon if not already running.
+echo "[forge-ai] restarting git-ai daemon to load new config..."
+git-ai bg restart 2>&1 | sed 's/^/[forge-ai] /' || true
+
+# --- verify daemon is healthy ---
+if git-ai bg status >/dev/null 2>&1; then
+  echo "[forge-ai] daemon: running"
+else
+  echo "[forge-ai] daemon: NOT running — try 'git-ai bg start' manually" >&2
+fi
+
 echo "[forge-ai] hook registered: $(git-ai config git_ai_hooks.post_notes_updated 2>/dev/null || echo MISSING)"
 echo "[forge-ai] git_hooks_enabled: $(git-ai config feature_flags.git_hooks_enabled 2>/dev/null || echo unknown)"
 echo "[forge-ai] prompt_storage:   $(git-ai config prompt_storage 2>/dev/null || echo unknown)"
