@@ -81,10 +81,14 @@ The script is idempotent — it:
 
 The `project_root` is auto-detected during setup (finds where `.git` directories are) or manually specified. This tells the enrichment script where to search for repos when computing diff stats.
 
-Plus one git-ai config entry:
+Plus two entries in **git-ai's own config** (`~/.git-ai/config.json`, NOT git's global config — git config keys cannot contain underscores). Both are written via the `git-ai` CLI:
+
+```bash
+git-ai config --add git_ai_hooks.post_notes_updated ~/.forge-ai/enrich-and-post.sh
+git-ai config set feature_flags.git_hooks_enabled true   # off by default in 1.3.4
 ```
-git_ai_hooks.post_notes_updated = ~/.forge-ai/enrich-and-post.sh
-```
+
+The `git_hooks_enabled` feature flag must be on or the hook is silently inert.
 
 ### How attribution is computed
 
