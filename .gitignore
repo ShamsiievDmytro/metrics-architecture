@@ -1,0 +1,25 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# IDE
+.idea/
+.vscode/
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+
+# Docker volumes (if mapped locally)
+data/
+
+# Test results
+TestResults/
+*.trx
+coverage*.xml
