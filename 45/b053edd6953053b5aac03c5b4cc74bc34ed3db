@@ -1,0 +1,40 @@
+test2.json
+  a32eb39a046df3b9 1-3
+README.md
+  5a709de5233a70ca 97
+test1.json
+  a32eb39a046df3b9 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "45b053edd6953053b5aac03c5b4cc74bc34ed3db",
+  "prompts": {
+    "5a709de5233a70ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "89484589-20dd-4c6b-8d4c-d7271d3a2beb",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "a32eb39a046df3b9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "89609cfb-7f74-46ed-9415-e49b4d2ae162",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Dmytro Shamsiiev",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 0,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
