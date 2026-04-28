@@ -94,3 +94,4 @@ The api container runs `dotnet watch run` against bind-mounted source — code c
 ## What this POC does NOT do (yet)
 
 See architecture §9 (known limitations) and "Future Considerations". In particular: no row-level security, no per-developer auth, no dashboard frontend, no retry queue beyond the 3-attempt curl loop in `enrich-and-post.sh`.
+ 
