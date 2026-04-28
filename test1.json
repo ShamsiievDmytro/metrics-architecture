@@ -1,4 +1,7 @@
 {
   "name": "dima",
-  "role": "engineer"
+  "role": "engineer",
+  "age": 30,
+  "skills": ["python", "javascript", "docker"],
+  "location": "Berlin"
 }
