@@ -11,5 +11,10 @@
   },
   "team": "platform",
   "verified": true,
-  "stage": "retry-2"
+  "stage": "retry-2",
+  "email": "dmytroshamsiiev@gmail.com",
+  "languages": ["english", "ukrainian", "german"],
+  "remote": true,
+  "timezone": "Europe/Berlin",
+  "joined": "2026-04-28"
 }
