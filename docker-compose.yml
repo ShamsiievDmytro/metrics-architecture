@@ -1,0 +1,43 @@
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_PID: Developer
+    ports:
+      - "${MSSQL_PORT:-1433}:1433"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    volumes:
+      - mssql_data:/var/opt/mssql
+
+  api:
+    build: ./api
+    depends_on:
+      mssql:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: "Server=mssql,1433;Database=${DB_NAME};User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;"
+      Forge__PublicApiUrl: ${PUBLIC_API_URL}
+      Forge__SeedTeamName: ${SEED_TEAM_NAME}
+      Forge__SeedTeamApiKey: ${SEED_TEAM_API_KEY}
+      Forge__ScriptsPath: /scripts
+      DOTNET_USE_POLLING_FILE_WATCHER: "1"
+    ports:
+      - "${API_PORT:-8000}:8080"
+    volumes:
+      - ./api:/src
+      - ./scripts:/scripts:ro
+
+volumes:
+  mssql_data:
