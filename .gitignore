@@ -16,8 +16,8 @@ obj/
 # OS
 .DS_Store
 
-# Docker volumes (if mapped locally)
-data/
+# Docker volumes (if mapped locally) — root-only to avoid colliding with EF "Data/" folders on case-insensitive filesystems
+/data/
 
 # Test results
 TestResults/
