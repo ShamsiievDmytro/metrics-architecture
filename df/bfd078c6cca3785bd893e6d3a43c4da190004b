@@ -1,0 +1,23 @@
+README.md
+  f225afc2fe1d95a3 20-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "dfbfd078c6cca3785bd893e6d3a43c4da190004b",
+  "prompts": {
+    "f225afc2fe1d95a3": {
+      "agent_id": {
+        "tool": "mock_ai",
+        "id": "ai-thread-1777404770369863000",
+        "model": "unknown"
+      },
+      "human_author": "Dmytro Shamsiiev",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 0,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
