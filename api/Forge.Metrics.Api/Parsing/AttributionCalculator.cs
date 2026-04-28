@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Forge.Metrics.Api.Parsing;
 
 public sealed record AttributionResult(
@@ -23,10 +25,14 @@ public static class AttributionCalculator
             ? Math.Round((decimal)agentLines / total * 100m, 1)
             : 0m;
 
+        // git-ai 1.3.4 emits "overriden_lines" (typo); the spec uses "overridden_lines".
+        // Read either so both real notes and spec-shaped notes work.
         var overridden = 0;
         foreach (var prompt in parsed.Prompts.Values)
-            if (prompt["overridden_lines"] is { } v && v.GetValue<int>() is var n)
-                overridden += n;
+        {
+            var node = prompt["overriden_lines"] ?? prompt["overridden_lines"];
+            if (node is not null) overridden += node.GetValue<int>();
+        }
 
         var contributingPromptIds = parsed.Entries
             .Where(e => !e.IsHuman)
@@ -34,9 +40,17 @@ public static class AttributionCalculator
             .Distinct()
             .ToArray();
 
-        string? JoinDistinct(string field) =>
+        string? AgentField(JsonObject p) =>
+            (p["agent_id"] as JsonObject)?["tool"]?.GetValue<string>()
+            ?? p["agent"]?.GetValue<string>();
+
+        string? ModelField(JsonObject p) =>
+            (p["agent_id"] as JsonObject)?["model"]?.GetValue<string>()
+            ?? p["model"]?.GetValue<string>();
+
+        string? Join(Func<JsonObject, string?> getField) =>
             contributingPromptIds
-                .Select(pid => parsed.Prompts.TryGetValue(pid, out var p) ? p[field]?.GetValue<string>() : null)
+                .Select(pid => parsed.Prompts.TryGetValue(pid, out var p) ? getField(p) : null)
                 .Where(s => !string.IsNullOrEmpty(s))
                 .Distinct()
                 .DefaultIfEmpty(null)
@@ -47,7 +61,7 @@ public static class AttributionCalculator
             humanLines,
             pct,
             overridden,
-            JoinDistinct("agent"),
-            JoinDistinct("model"));
+            Join(AgentField),
+            Join(ModelField));
     }
 }

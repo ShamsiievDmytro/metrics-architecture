@@ -96,4 +96,39 @@ foo.py
         Assert.Equal("claude", r.Agents);
         Assert.Equal("claude-opus-4-7", r.Models);
     }
+
+    // git-ai 1.3.4 wire format: agent_id is nested, overriden_lines is misspelled.
+    // The implementation must read both shapes so real notes work end-to-end.
+    private const string GitAi134Format = """
+test1.json
+  a32eb39a046df3b9 1-3
+test2.json
+  a32eb39a046df3b9 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "prompts": {
+    "a32eb39a046df3b9": {
+      "agent_id": { "tool": "claude", "id": "x", "model": "claude-opus-4-7" },
+      "human_author": "Tester",
+      "total_additions": 6,
+      "accepted_lines": 6,
+      "overriden_lines": 2
+    }
+  }
+}
+""";
+
+    [Fact]
+    public void Reads_git_ai_1_3_4_nested_agent_id_and_misspelled_overriden_lines()
+    {
+        var r = AttributionCalculator.Compute(NoteParser.Parse(GitAi134Format));
+        Assert.Equal(6, r.AgentLines);
+        Assert.Equal(0, r.HumanLines);
+        Assert.Equal(100m, r.AgentPercentage);
+        Assert.Equal(2, r.OverriddenLines);            // came from "overriden_lines" (typo)
+        Assert.Equal("claude", r.Agents);              // came from agent_id.tool
+        Assert.Equal("claude-opus-4-7", r.Models);     // came from agent_id.model
+    }
 }
