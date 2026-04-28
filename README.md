@@ -17,3 +17,5 @@ curl -s "http://localhost:8000/setup/<TEAM_ID>/<API_KEY>" | bash
 ```
 
 See `2026-04-28-forge-ai-metrics-architecture.md` for the full architecture.
+
+<!-- pipeline test 2026-04-28T19:32:50Z -->
