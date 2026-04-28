@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Forge AI Metrics — developer setup. Idempotent: safe to re-run.
+set -euo pipefail
+
+API_URL="__API_URL__"
+API_KEY="__API_KEY__"
+TEAM_ID="__TEAM_ID__"
+
+FORGE_DIR="${HOME}/.forge-ai"
+mkdir -p "$FORGE_DIR"
+
+need() { command -v "$1" >/dev/null 2>&1 || { echo "[forge-ai] missing dependency: $1" >&2; exit 1; }; }
+need curl
+need jq
+need git
+
+if ! command -v git-ai >/dev/null 2>&1; then
+  echo "[forge-ai] git-ai is not installed. See https://github.com/git-ai-project/git-ai" >&2
+  exit 1
+fi
+
+detect_project_root() {
+  for cand in "$HOME/Projects" "$HOME/Code" "$HOME/work" "$HOME/src" "$HOME/dev"; do
+    if [[ -d "$cand" ]] && find "$cand" -maxdepth 4 -type d -name '.git' -print -quit 2>/dev/null | grep -q .; then
+      printf '%s' "$cand"
+      return
+    fi
+  done
+  printf '%s' "$HOME"
+}
+PROJECT_ROOT="${FORGE_PROJECT_ROOT:-$(detect_project_root)}"
+echo "[forge-ai] project_root: $PROJECT_ROOT  (override with FORGE_PROJECT_ROOT=...)"
+
+curl -fsS "${API_URL}/setup/${TEAM_ID}/${API_KEY}/enrich-and-post.sh" \
+  -o "${FORGE_DIR}/enrich-and-post.sh"
+chmod +x "${FORGE_DIR}/enrich-and-post.sh"
+
+cat > "${FORGE_DIR}/config.json" <<JSON
+{
+  "api_url": "${API_URL}",
+  "api_key": "${API_KEY}",
+  "team_id": "${TEAM_ID}",
+  "project_root": "${PROJECT_ROOT}"
+}
+JSON
+
+git config --global --replace-all git_ai_hooks.post_notes_updated "${FORGE_DIR}/enrich-and-post.sh"
+git config --global git_ai.prompt_storage local || true
+
+echo "[forge-ai] hook: $(git config --global --get git_ai_hooks.post_notes_updated)"
+echo "[forge-ai] config: ${FORGE_DIR}/config.json"
+echo "[forge-ai] setup complete."
