@@ -17,5 +17,5 @@
   "remote": true,
   "timezone": "Europe/Berlin",
   "joined": "2026-04-28",
-  "ingest_test": "e2e-after-fixes"
+  "ingest_test": "e2e-after-array-fix"
 }
