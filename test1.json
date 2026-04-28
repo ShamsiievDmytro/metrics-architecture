@@ -28,5 +28,6 @@
   "ingest_test_9": "e2e-confirm-10",
   "ingest_test_10": "e2e-confirm-11",
   "ingest_test_11": "e2e-confirm-12",
-  "ingest_test_12": "e2e-confirm-13"
+  "ingest_test_12": "e2e-confirm-13",
+  "ingest_test_13": "author-extract-check"
 }
