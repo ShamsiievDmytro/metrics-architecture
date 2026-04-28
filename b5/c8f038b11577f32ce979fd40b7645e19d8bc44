@@ -1,0 +1,23 @@
+scripts/setup.sh.tmpl
+  5a709de5233a70ca 110-113,115-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "b5c8f038b11577f32ce979fd40b7645e19d8bc44",
+  "prompts": {
+    "5a709de5233a70ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "89484589-20dd-4c6b-8d4c-d7271d3a2beb",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Dmytro Shamsiiev",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 5,
+      "accepted_lines": 10,
+      "overriden_lines": 0
+    }
+  }
+}
