@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Forge AI Metrics — developer setup. Idempotent: safe to re-run.
+# Forge AI Metrics — developer setup.
+# Installs git-ai + jq if missing, registers the post_notes_updated hook,
+# and writes ~/.forge-ai/config.json. Idempotent: safe to re-run.
 set -euo pipefail
 
 API_URL="__API_URL__"
@@ -9,16 +11,75 @@ TEAM_ID="__TEAM_ID__"
 FORGE_DIR="${HOME}/.forge-ai"
 mkdir -p "$FORGE_DIR"
 
-need() { command -v "$1" >/dev/null 2>&1 || { echo "[forge-ai] missing dependency: $1" >&2; exit 1; }; }
-need curl
-need jq
-need git
+OS="$(uname -s)"
 
-if ! command -v git-ai >/dev/null 2>&1; then
-  echo "[forge-ai] git-ai is not installed. See https://github.com/git-ai-project/git-ai" >&2
-  exit 1
+# --- baseline tools ---
+for tool in curl git; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "[forge-ai] missing $tool — install it and re-run." >&2
+    exit 1
+  }
+done
+
+# --- jq ---
+install_jq() {
+  case "$OS" in
+    Darwin)
+      if ! command -v brew >/dev/null 2>&1; then
+        echo "[forge-ai] homebrew is required on macOS to install jq — install from https://brew.sh and re-run." >&2
+        exit 1
+      fi
+      brew install jq
+      ;;
+    Linux)
+      if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update -qq && sudo apt-get install -y jq
+      elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y jq
+      elif command -v yum >/dev/null 2>&1; then
+        sudo yum install -y jq
+      elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -Sy --noconfirm jq
+      elif command -v apk >/dev/null 2>&1; then
+        sudo apk add --no-cache jq
+      else
+        echo "[forge-ai] no supported package manager found; install jq manually." >&2
+        exit 1
+      fi
+      ;;
+    *)
+      echo "[forge-ai] unsupported OS ($OS) — install jq manually." >&2
+      exit 1
+      ;;
+  esac
+}
+if ! command -v jq >/dev/null 2>&1; then
+  echo "[forge-ai] installing jq..."
+  install_jq
 fi
 
+# --- git-ai ---
+add_to_path() {
+  local d="$1"
+  [[ -d "$d" && ":$PATH:" != *":$d:"* ]] && export PATH="$d:$PATH"
+}
+if ! command -v git-ai >/dev/null 2>&1; then
+  echo "[forge-ai] installing git-ai (https://usegitai.com/install.sh)..."
+  curl -sSL https://usegitai.com/install.sh | bash
+  # The official installer typically drops the binary in one of these locations.
+  add_to_path "$HOME/.local/bin"
+  add_to_path "$HOME/.cargo/bin"
+  add_to_path "/opt/homebrew/bin"
+  add_to_path "/usr/local/bin"
+  if ! command -v git-ai >/dev/null 2>&1; then
+    echo "[forge-ai] git-ai installer ran but binary not on PATH." >&2
+    echo "[forge-ai] Open a new shell (so the installer's PATH change takes effect) and re-run this command." >&2
+    exit 1
+  fi
+fi
+echo "[forge-ai] git-ai: $(git-ai --version 2>/dev/null || echo 'present (version check skipped)')"
+
+# --- project root ---
 detect_project_root() {
   for cand in "$HOME/Projects" "$HOME/Code" "$HOME/work" "$HOME/src" "$HOME/dev"; do
     if [[ -d "$cand" ]] && find "$cand" -maxdepth 4 -type d -name '.git' -print -quit 2>/dev/null | grep -q .; then
@@ -31,10 +92,12 @@ detect_project_root() {
 PROJECT_ROOT="${FORGE_PROJECT_ROOT:-$(detect_project_root)}"
 echo "[forge-ai] project_root: $PROJECT_ROOT  (override with FORGE_PROJECT_ROOT=...)"
 
+# --- hook script (always overwrite with latest) ---
 curl -fsS "${API_URL}/setup/${TEAM_ID}/${API_KEY}/enrich-and-post.sh" \
   -o "${FORGE_DIR}/enrich-and-post.sh"
 chmod +x "${FORGE_DIR}/enrich-and-post.sh"
 
+# --- config ---
 cat > "${FORGE_DIR}/config.json" <<JSON
 {
   "api_url": "${API_URL}",
@@ -44,6 +107,7 @@ cat > "${FORGE_DIR}/config.json" <<JSON
 }
 JSON
 
+# --- register hook (idempotent) ---
 git config --global --replace-all git_ai_hooks.post_notes_updated "${FORGE_DIR}/enrich-and-post.sh"
 git config --global git_ai.prompt_storage local || true
 
