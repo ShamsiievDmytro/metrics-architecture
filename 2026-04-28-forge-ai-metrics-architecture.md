@@ -165,7 +165,12 @@ Headers:
 2. **Deduplicate** → if `(team_id, repo_name, commit_sha)` exists, upsert with latest data (a re-submitted note may have better attribution after git-ai update or rebase).
 3. **Parse `note_content`:**
    - File map section (before `---`): file paths + line ranges, each attributed to a prompt ID or human ID (`h_` prefix)
-   - JSON section (after `---`): prompts with agent/model/accepted/overridden, humans with author name
+   - JSON section (after `---`): `prompts` with per-prompt metadata, `humans` with author name. The on-the-wire shape from git-ai 1.3.4 is:
+     - `prompts[id].agent_id.tool` — agent name (e.g., `claude`)
+     - `prompts[id].agent_id.model` — model id (e.g., `claude-opus-4-7`)
+     - `prompts[id].overriden_lines` — note the spelling: git-ai 1.3.4 misspells `overridden` as `overriden` (single `d`). Parsers must read this key.
+     - `prompts[id].accepted_lines`, `total_additions`, `human_author`, etc. — additional metadata
+     The flat fallback (`prompts[id].agent`, `prompts[id].model`, `prompts[id].overridden_lines`) is still accepted for forward-compatibility / synthetic test payloads.
 4. **Compute attribution (from file map — no external data needed):**
    - `agent_lines` = sum of line ranges with prompt IDs (not `h_` prefixed)
    - `human_lines` = sum of line ranges with `h_` prefix
