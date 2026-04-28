@@ -107,10 +107,15 @@ cat > "${FORGE_DIR}/config.json" <<JSON
 }
 JSON
 
-# --- register hook (idempotent) ---
-git config --global --replace-all git_ai_hooks.post_notes_updated "${FORGE_DIR}/enrich-and-post.sh"
-git config --global git_ai.prompt_storage local || true
+# --- register hook in git-ai's config (NOT git config) ---
+# git-ai 1.3.4 stores hooks in ~/.git-ai/config.json under git_ai_hooks.<event>.
+# Setting via the CLI is idempotent — re-running overwrites the value.
+git-ai config --add git_ai_hooks.post_notes_updated "${FORGE_DIR}/enrich-and-post.sh"
 
-echo "[forge-ai] hook: $(git config --global --get git_ai_hooks.post_notes_updated)"
+# Enable git hooks (off by default in 1.3.4) so post_notes_updated actually fires.
+git-ai config set feature_flags.git_hooks_enabled true
+
+echo "[forge-ai] hook registered: $(git-ai config git_ai_hooks.post_notes_updated 2>/dev/null || echo MISSING)"
+echo "[forge-ai] git_hooks_enabled: $(git-ai config feature_flags.git_hooks_enabled 2>/dev/null || echo unknown)"
 echo "[forge-ai] config: ${FORGE_DIR}/config.json"
 echo "[forge-ai] setup complete."
