@@ -31,5 +31,11 @@
   "ingest_test_12": "e2e-confirm-13",
   "ingest_test_13": "author-extract-check",
   "ingest_test_14": "author-extract-confirm",
-  "ingest_test_15": "post-setup-rerun"
+  "ingest_test_15": "post-setup-rerun",
+  "ingest_test_16": "post-setup-confirm",
+  "ingest_test_17": "post-setup-confirm-2",
+  "ingest_test_18": "post-setup-confirm-3",
+  "ingest_test_19": "post-setup-confirm-4",
+  "ingest_test_20": "post-setup-confirm-5",
+  "ingest_test_21": "post-setup-confirm-6"
 }
