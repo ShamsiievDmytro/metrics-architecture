@@ -14,6 +14,11 @@ public static class IngestEndpoints
             {
                 var team = http.RequireTeam();
 
+                if (string.IsNullOrWhiteSpace(payload.RepoName) ||
+                    string.IsNullOrWhiteSpace(payload.CommitSha) ||
+                    string.IsNullOrWhiteSpace(payload.NoteContent))
+                    return Results.BadRequest(new { error = "repo_name, commit_sha, note_content are required" });
+
                 ParsedNote parsed;
                 try { parsed = NoteParser.Parse(payload.NoteContent); }
                 catch (FormatException ex) { return Results.BadRequest(new { error = ex.Message }); }
@@ -36,7 +41,7 @@ public static class IngestEndpoints
                 row.RepoUrl = payload.RepoUrl;
                 row.Branch = payload.Branch;
                 row.IsDefaultBranch = payload.IsDefaultBranch;
-                row.CommitAuthor = payload.CommitAuthor;
+                row.CommitAuthor = payload.CommitAuthor ?? ExtractHumanAuthor(parsed);
                 row.Agent = attribution.Agents ?? payload.Agent;
                 row.Model = attribution.Models ?? payload.Model;
                 row.AgentLines = attribution.AgentLines;
@@ -59,5 +64,16 @@ public static class IngestEndpoints
             .AddEndpointFilter<ApiKeyFilter>();
 
         return app;
+    }
+
+    // git-ai notes carry the author in prompts.<id>.human_author (mixed/AI commits)
+    // or humans.<id>.human_author (pure human commits). Fall back through both.
+    private static string? ExtractHumanAuthor(ParsedNote parsed)
+    {
+        foreach (var p in parsed.Prompts.Values)
+            if (p["human_author"]?.GetValue<string>() is { Length: > 0 } a) return a;
+        foreach (var h in parsed.Humans.Values)
+            if (h["human_author"]?.GetValue<string>() is { Length: > 0 } a) return a;
+        return null;
     }
 }

@@ -11,6 +11,8 @@ public static partial class NoteParser
 
     public static ParsedNote Parse(string noteContent)
     {
+        if (string.IsNullOrWhiteSpace(noteContent))
+            throw new FormatException("note_content is empty");
         if (!noteContent.Contains("---", StringComparison.Ordinal))
             throw new FormatException("note missing '---' separator between file map and JSON");
 
