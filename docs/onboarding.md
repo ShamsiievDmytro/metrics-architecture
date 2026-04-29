@@ -3,7 +3,7 @@
 **Time required:** ~2 minutes.
 **What you'll get:** every commit you make through an AI coding agent is automatically attributed (AI %, lines, agent/model) and shows up in the team dashboard.
 
-If you hit anything this guide doesn't cover, the deep-dive reference is `2026-04-28-forge-ai-metrics-architecture.md` in the repo root — Section 10 is the troubleshooting playbook.
+If you hit anything this guide doesn't cover, the deep-dive reference is [`ai-code-metrics-architecture.md`](./ai-code-metrics-architecture.md) (same `docs/` folder) — Section 10 is the troubleshooting playbook.
 
 ---
 
@@ -254,5 +254,5 @@ This stops all telemetry. To remove git-ai itself (rarely needed), follow the up
 ## Getting help
 
 - **First:** check `~/.forge-ai/last-run.log` and `~/.forge-ai/last-payload.json` — most issues are diagnosable from these.
-- **Second:** read Section 10 of `2026-04-28-forge-ai-metrics-architecture.md` — has SQL queries, daemon log paths, replay commands.
+- **Second:** read Section 10 of [`ai-code-metrics-architecture.md`](./ai-code-metrics-architecture.md) — has SQL queries, daemon log paths, replay commands.
 - **Third:** ping your team lead with: setup URL (redact the API key), output of `git-ai bg status`, contents of `~/.forge-ai/last-run.log`, and the last 50 lines of `~/.git-ai/internal/daemon/logs/<pid>.log`.

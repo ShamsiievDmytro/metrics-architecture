@@ -1,38 +1,35 @@
 # Forge AI Metrics — Coding Metrics Extension
 
-*Deck-style overview for the technical team. One section per slide.*
 
-This document describes how we extend our existing **Forge AI platform** (API, DB, metrics dashboard) and our existing **WoD AI SSD** developer setup package to capture **AI coding-attribution** metrics from every developer machine — internal and tenant — with a 2-minute setup and zero per-repo configuration.
+This document describes how we extend our existing **Forge AI platform** (API, DB, metrics dashboard) and our existing **WoD AI SSD** developer setup package to capture **AI coding-attribution** metrics from every developer machine — internal and tenant.
 
 ---
 
-## Slide 1 — The problem
+## 1 — The problem
 
 - AI coding agents (Claude, Copilot, Cursor, Codex, …) now author a meaningful share of our committed code
 - Leadership wants to know **how much**, **by whom**, **with which agent/model**, **per team and per repo** — for both internal teams and tenant clients
-- Existing options either:
-  - Live inside one IDE (single-vendor, partial picture), or
-  - Require SCM integration / CI changes / per-repo setup — not viable across many tenants and many repos
 
 **We need:** cross-agent, cross-repo visibility with **zero per-repo setup** and **no source code leaving the developer's machine** — and we want it integrated into the platform we already operate, not as a separate product.
 
 ---
 
-## Slide 2 — Our solution (extend what we already have)
+## 2 — Our solution (extend what we already have)
 
 We **bundle** local capture into our existing developer onboarding package, and **extend** our existing Forge platform to serve the data:
 
 1. **Developer-side capture lives inside the WoD AI SSD setup package** — the same package developers already run for AI workflow setup. It now also installs/upgrades [git-ai](https://usegitai.com), registers a `post_notes_updated` hook, and writes the Forge AI Metrics config. **Zero new install steps for developers — it's part of the bundle.**
 2. **Local attribution via [git-ai](https://usegitai.com/docs/cli)'s daemon** — git-ai already attributes every commit to AI prompt IDs vs. human author IDs at line-range granularity. Our hook script reads its output, enriches with diff stats, and posts to the platform.
-3. **Ingest + read endpoints are extensions of the existing Forge API** — adds `/api/coding-metrics/ingest` and `/api/coding-metrics/*` read endpoints. Multi-tenancy support is being added to Forge API as a platform-level capability; this feature uses the same `X-API-Key` → `team_id` resolution.
-4. **Storage is an extension of the existing Forge DB** — two new tables (`Teams`, `Commits`). Multi-tenant isolation enforced at the application layer (every query filters on `team_id`).
+3. **Ingest + read endpoints are extensions of the existing Forge API** — adds `/api/coding-metrics/ingest` and `/api/coding-metrics/*` read endpoints. Multi-tenancy support is being added to Forge API as a platform-level capability; this feature uses the same `X-API-Key` → `tenant_id` resolution.
+4. **Storage is an extension of the existing Forge DB** — one new `Commits` table; tenant resolution leans on the platform-level multi-tenancy work (we don't ship our own tenant table). Multi-tenant isolation enforced at the application layer (every query filters on `tenant_id`).
 5. **Visualization is an extension of the existing Forge metrics dashboard** — a new "Coding metrics" view next to existing dashboards. Same auth, same tenant scoping, same operational model.
+6. **End-to-end idempotent** — re-running the package is the upgrade path for everything (git-ai version, hook script, config drift, key rotation). 
 
 Validated end-to-end across multiple repos in one chat session — three commits to three different repos all flowed through to the dashboard within seconds.
 
 ---
 
-## Slide 3 — Architecture diagram
+## 3 — Architecture diagram
 
 ```mermaid
 flowchart TB
@@ -51,8 +48,8 @@ flowchart TB
 
     subgraph FORGE["☁️ Forge AI platform <i>(existing, extended)</i>"]
         direction TB
-        API["<b>Forge API</b><br/>+ /api/coding-metrics/ingest <i>(new)</i><br/>+ /api/coding-metrics/* read <i>(new)</i><br/>multi-tenancy: X-API-Key → team_id"]
-        DB[("<b>Forge DB</b> <i>(existing)</i><br/>+ Teams <i>(new table)</i><br/>+ Commits <i>(new table)</i>")]
+        API["<b>Forge API</b><br/>+ /api/coding-metrics/ingest <i>(new)</i><br/>+ /api/coding-metrics/* read <i>(new)</i><br/>multi-tenancy: X-API-Key → tenant_id"]
+        DB[("<b>Forge DB</b> <i>(existing)</i><br/>+ Commits <i>(new table)</i>")]
         UI["<b>Forge metrics dashboard</b> <i>(existing)</i><br/>+ Coding metrics view <i>(new)</i><br/>per-team · per-developer<br/>per-repo · per-agent"]
         API --> DB
         DB --> UI
@@ -73,20 +70,22 @@ The three layers map to **distribution → capture → platform**, top-to-bottom
 
 ---
 
-## Slide 4 — Data flow (six steps)
+## 4 — Data flow (six steps)
 
 1. Developer's AI agent edits files → git-ai's daemon checkpoints the change against a prompt ID
 2. Developer runs `git commit` → daemon writes a `refs/notes/ai` note containing the file map (line ranges per prompt or human ID) + a JSON section with prompt metadata (`agent_id.tool`, `agent_id.model`, `human_author`, `accepted_lines`, `overriden_lines`)
 3. Daemon dispatches `post_notes_updated` (JSON array of events) → our hook script
 4. Script enriches each event with `diff_additions`, `diff_deletions`, `committed_at`; POSTs to the new `/api/coding-metrics/ingest` endpoint on Forge API
-5. Forge API authenticates via `X-API-Key` → resolves `team_id` → parses note → computes `ai_lines / human_lines / agent / model / human_author / overridden_lines` → upserts on `(team_id, repo_name, commit_sha)` into the new `Commits` table in Forge DB
+5. Forge API authenticates via `X-API-Key` → resolves `tenant_id` → parses note → computes `ai_lines / human_lines / agent / model / human_author / overridden_lines` → upserts on `(tenant_id, repo_name, commit_sha)` into the new `Commits` table in Forge DB
 6. Forge dashboard's new "Coding metrics" view queries the same Forge DB; data appears within ~3 seconds of commit
 
-**Failure modes are silent-but-logged**: hook stderr is tee'd to `~/.forge-ai/last-run.log`, raw payloads dumped to `~/.forge-ai/last-payload.json`. Never blocks `git commit`.
+**Failure-mode policy:**
+- Each event is POSTed with **3 retries, 2-second backoff**. After three failures, the event is dropped and the script exits 0 — `git commit` is **never blocked** by telemetry.
+- Stderr from every hook run is tee'd to `~/.forge-ai/last-run.log` (per-attempt HTTP code + response body). The raw daemon payload of the most recent run is dumped to `~/.forge-ai/last-payload.json`.
 
 ---
 
-## Slide 5 — Developer local machine (what the package installs)
+## 5 — Developer local machine (what the package installs)
 
 What ends up on the developer's machine after the WoD AI SSD package runs (or after they configure their tenant key on an already-installed package). All paths are global per-user — no per-repo state, no `.git/hooks/` symlinks.
 
@@ -103,7 +102,7 @@ What ends up on the developer's machine after the WoD AI SSD package runs (or af
     └── logs/<pid>.log                   structured daemon log
 
 ~/.forge-ai/                             ← our package adds these
-├── config.json                          tenant config (api_url, api_key, team_id, project_root)
+├── config.json                          tenant config (api_url, api_key, tenant_id, project_root)
 ├── enrich-and-post.sh                   the post_notes_updated hook script
 ├── last-run.log                         stderr from each hook run (diagnosis)
 └── last-payload.json                    most recent raw daemon payload (diagnosis)
@@ -136,13 +135,13 @@ What ends up on the developer's machine after the WoD AI SSD package runs (or af
 | `curl`, `git` | baseline | refused if missing — developer must install |
 | `jq` | parsing hook payloads | auto-installed via `brew` / `apt` / `dnf` / `yum` / `pacman` / `apk` |
 | `git-ai` 1.3.4+ | local attribution daemon | auto-installed via official installer at [https://usegitai.com/docs/cli](https://usegitai.com/docs/cli) |
-| Active integrated AI agent | source of attribution events | Claude Code CLI/extension or Copilot extension *(verified working — see Slide 9)* |
+
 
 ### Inputs the package needs (from admin / detection)
 
 | Input | Source | Stored in |
 |---|---|---|
-| `TEAM_ID` (UUID) | Forge AI Admin → tenant lead | `~/.forge-ai/config.json` |
+| `TENANT_ID` | Forge AI Admin → tenant lead | `~/.forge-ai/config.json` |
 | `API_KEY` (e.g. `acme_<random>`) | Forge AI Admin → tenant lead | `~/.forge-ai/config.json` *(plain text locally; hashed server-side)* |
 | `api_url` | Package default per environment | `~/.forge-ai/config.json` |
 | `project_root` | Auto-detected (`~/Projects` → `~/Code` → `~/work` → `~/src` → `~/dev`); override with `FORGE_PROJECT_ROOT=...` | `~/.forge-ai/config.json` |
@@ -152,7 +151,7 @@ The two diagnostic files (`last-run.log`, `last-payload.json`) are the only wind
 
 ---
 
-## Slide 6 — What we collect / what we don't
+## 6 — What we collect / what we don't
 
 | ✅ Sent to Forge API | ❌ Never leaves the machine |
 |---|---|
@@ -162,11 +161,66 @@ The two diagnostic files (`last-run.log`, `last-payload.json`) are the only wind
 | Author name (extracted from git-ai note) | SCM credentials |
 | Line counts + diff stats (counts only) | Anything outside the metadata above |
 
-**Tenant isolation:** every row stamped with `team_id`; every query filters on it; the API key resolves to exactly one team. Same pattern Forge platform uses for other multi-tenant endpoints.
+**Tenant isolation:** every row stamped with `tenant_id`; every query filters on it; the API key resolves to exactly one tenant. Same pattern Forge platform uses for other multi-tenant endpoints.
 
 ---
 
-## Slide 7 — Onboarding pipeline (internal team or external tenant)
+## 7 — Forge API + DB extensions
+
+Concrete additions to the existing platform — kept deliberately small.
+
+### Tenant provisioning *(existing process — not part of this design)*
+
+Whichever process Forge already uses to provision a multi-tenant client yields the two values we need:
+
+- `TENANT_ID` — opaque identifier (UUID) that scopes every metrics row
+- `API_KEY` — secret string the developer's machine sends as `X-API-Key`; the Forge platform hashes and resolves it back to one `TENANT_ID`
+
+This document **does not** specify how those are minted, stored, or rotated — that's the responsibility of the platform-level multi-tenancy work happening in parallel. We just consume the result.
+
+### New `Commits` table in Forge DB
+
+One new table holds every ingested commit. Every row is stamped with `tenant_id`; every read filters on it.
+
+| Column | Type | Notes |
+|---|---|---|
+| `Id` | UUID (PK) | Server-generated row id |
+| `TenantId` | UUID | Resolved from `X-API-Key` on every ingest. Foreign-keys into the platform-level tenancy table. |
+| `RepoName` | string | E.g. `gitai-service-b` |
+| `RepoUrl` | string · nullable | E.g. `https://github.com/.../gitai-service-b.git` |
+| `CommitSha` | string(40) | Full SHA |
+| `Branch` | string · nullable | |
+| `IsDefaultBranch` | bool | |
+| `CommitAuthor` | string · nullable | Extracted server-side from the git-ai note (`prompts.<id>.human_author` / `humans.<id>.human_author`) |
+| `Agent` | string · nullable | `claude` / `github-copilot` / `cursor` / `codex` / … |
+| `Model` | string · nullable | E.g. `claude-opus-4-7` |
+| `AgentLines` | int | Lines authored through an AI agent |
+| `HumanLines` | int | Lines authored by a human |
+| `OverriddenLines` | int | AI lines later modified by the human |
+| `AgentPercentage` | decimal(5,1) | `AgentLines / (AgentLines + HumanLines) × 100` |
+| `DiffAdditions` | int | From `git diff --numstat` (enriched client-side) |
+| `DiffDeletions` | int | From `git diff --numstat` |
+| `CommittedAt` | timestamp · nullable | Actual commit time (enriched). Used for time-series. |
+| `IngestedAt` | timestamp | Server-set on insert |
+| `RawNote` | text | Verbatim git-ai note — kept for replay if the parser changes |
+
+**Idempotency key:** `UNIQUE(TenantId, RepoName, CommitSha)`. Re-submitting the same commit (retries, daemon re-emits, post-rebase rewrites) upserts safely — no duplicates.
+
+### New Forge API endpoints
+
+| Method | Path | Purpose | Returns |
+|---|---|---|---|
+| `POST` | `/api/coding-metrics/ingest` | Hook calls this on every commit | `IngestResponse` (commit id + computed attribution) |
+| `GET` | `/api/coding-metrics/summary?period=30d` | Top-line tenant numbers | `{total_commits, ai_commits, ai_percentage, total_ai_lines, total_human_lines}` |
+| `GET` | `/api/coding-metrics/by-agent?period=30d` | Per agent / model breakdown | `[{agent, commits, ai_lines, avg_percentage}]` |
+| `GET` | `/api/coding-metrics/by-developer?period=30d` | Per author leaderboard | `[{author, commits, ai_percentage, ai_lines}]` |
+| `GET` | `/api/coding-metrics/by-repo?period=30d` | Per repo breakdown | `[{repo_name, commits, ai_percentage, ai_lines}]` |
+
+All endpoints require `X-API-Key` (resolves to a single `TenantId`); period accepts `7d` / `30d` / `90d` / custom range. Reads use `CommittedAt` (actual commit time), not `IngestedAt`, so time-series charts reflect when work happened.
+
+---
+
+## 8 — Onboarding pipeline (internal team or external tenant)
 
 The metrics-collection logic ships **inside** the WoD AI SSD package — no external setup URL, no separate installer to host. The developer's normal package install (or update) already includes git-ai install + the hook script + the config writer. Onboarding is purely about **provisioning a tenant key and handing it to developers**.
 
@@ -179,7 +233,7 @@ sequenceDiagram
     participant Forge as Forge API + DB
     participant UI as Forge dashboard
 
-    Admin->>Forge: Create Team row<br/>(name, hashed api_key)
+    Admin->>Forge: Provision tenant<br/>(existing platform process)<br/>→ TENANT_ID + API_KEY
     Admin->>Lead: Send TEAM_ID + API_KEY<br/>(secure channel)
     Lead->>Devs: Distribute TEAM_ID + API_KEY<br/>(Slack / email / wiki)
     Devs->>Devs: Configure WoD AI SSD package<br/>(env var / config file / CLI flag)<br/>idempotent, ~30 seconds
@@ -192,9 +246,9 @@ sequenceDiagram
 
 ---
 
-## Slide 8 — Worked example: what one commit looks like in the database
+## 9 — Worked example: what one commit looks like in the database
 
-A real ingested commit from a multi-repo Claude Code session — taken from `gitai-service-b`, SHA `ae20f6f29e22293875cbfa6e6252db59360d960a`. Picked because it's the **richest** of the three: mixed AI + human attribution, non-contiguous human line ranges, and `overridden_lines > 0`.
+A real ingested commit from a multi-repo Claude Code session 
 
 ### What the developer did
 
@@ -211,7 +265,7 @@ In one Claude Code session, asked Claude to add fields to `test.json` in three s
 | `CommitSha` | `ae20f6f29e22293875cbfa6e6252db59360d960a` |
 | `Branch` | `main` |
 | `IsDefaultBranch` | `1` |
-| `CommitAuthor` | `Dmytro Shamsiiev` *(extracted from `prompts.<id>.human_author`)* |
+| `CommitAuthor` | `Dmytro Shamsiiev`|
 | `Agent` | `claude` |
 | `Model` | `claude-opus-4-7` |
 | `AgentLines` | `2` |
@@ -260,40 +314,39 @@ test.json
 | `DiffAdditions / Deletions` | enrichment | `git diff --numstat ae20f6f2^!` — 12 added, 1 deleted |
 | `CommittedAt` | enrichment | `git log -1 --format=%aI ae20f6f2` — ISO 8601 with timezone |
 
-This is exactly what the Forge dashboard's "Coding metrics" view will read for every per-team / per-developer / per-repo / per-agent rollup.
+This is exactly what the Forge dashboard's "Coding metrics" view will read for every per-tenant / per-developer / per-repo / per-agent rollup.
 
 ---
 
-## Slide 9 — Status & validation
+## 10 — Status & validation
 
-**What's verified working today** (with git-ai 1.3.4 and Forge AI Metrics v1):
+**What's verified working today** (with git-ai 1.3.4):
 
 | Agent | Status |
 |---|---|
 | Claude Code (CLI) | ✅ Working — fully attributed, multi-repo verified |
-| Claude Code (VS Code ) | ✅ Working |
+| Claude Code (VS Code / JetBrains extension) | ✅ Working |
 | GitHub Copilot (VS Code extension) | ✅ Working |
 | Cursor | ⏳ Blocked on git-ai upstream — see [issue #1204](https://github.com/git-ai-project/git-ai/issues/1204) |
 | Codex | ⏳ Blocked on git-ai upstream — see [issue #1204](https://github.com/git-ai-project/git-ai/issues/1204) |
 
-**Pipeline-level validation:**
 
-- ✅ End-to-end across **6+ repos** on one developer machine, single Claude Code session → one row per repo per commit, all attributed correctly
-- ✅ Forge API extension hardened: BadRequest on missing fields, null-guard parser, `human_author` extracted from note (top-level payload doesn't carry it)
-- ✅ Hook script handles JSON array payload (undocumented in [usegitai.com docs](https://usegitai.com/docs/cli) — confirmed via binary inspection + live capture); stderr captured to `last-run.log` for diagnosis
-- ✅ Package configuration is fully idempotent — re-applying tenant key is the upgrade path for everything (git-ai version, hook script, config drift)
-- ✅ Onboarding doc live at `docs/onboarding.md`; deep architecture + troubleshooting at `docs/2026-04-28-forge-ai-metrics-architecture.md` Section 10
-
-**Production readiness:** v1 deployable for Claude (CLI + extension) and Copilot tenants as soon as Forge API multi-tenancy lands. Cursor and Codex coverage activates automatically the moment git-ai upstream ships the fix in [#1204](https://github.com/git-ai-project/git-ai/issues/1204) — no changes needed on our side. Other open items are tracked in Section 9 of the architecture doc (squash/rebase reconciliation, multi-agent conflict).
+**Production readiness:** deployable for Claude (CLI + extension) and Copilot tenants as soon as Forge API multi-tenancy lands. Cursor and Codex coverage activates automatically the moment git-ai upstream ships the fix in [#1204](https://github.com/git-ai-project/git-ai/issues/1204) — no changes needed on our side. Other open items are tracked in Section 9 of the architecture doc (squash/rebase reconciliation, multi-agent conflict).
 
 ---
 
-## Slide 10 — What we ask for
+## 11 — Honest limitations (pre-empting the Q&A)
 
-- ✋ **Sign-off on the integration shape** — coding-metrics endpoints living inside Forge API, tables living inside Forge DB, view living inside Forge dashboard, capture logic bundled in the WoD AI SSD package. Nothing standalone.
-- 📅 **Timeline visibility on Forge API multi-tenancy** — this feature depends on `X-API-Key → team_id` resolution being available platform-wide
-- 📦 **Bundling alignment with the WoD AI SSD package owners** — git-ai install + hook registration becomes part of the standard package; tenant key configured per-developer via env var / config / CLI flag
-- 🛣️ **Pilot tenant** — pick one internal team to onboard first; ~30 min admin work + a Slack message to their devs
-- 👀 **Watch git-ai [#1204](https://github.com/git-ai-project/git-ai/issues/1204)** — once merged, Cursor and Codex coverage lights up automatically for every tenant already on the package
 
-Questions / pushback welcome.
+| # | Limitation | Why it matters | Mitigation in v1 |
+|---|---|---|---|
+| L1 | **Local-only commits are included** | The hook fires on every commit, including branches that may never be pushed. Dashboard can over-count vs. "code that shipped". | Document expectation as "AI in drafts and final code combined." A future v2 could reconcile against SCM. |
+| L2 | **Multi-agent conflict** | When two agents (e.g., Claude + Copilot) are active simultaneously, the first agent to checkpoint claims file changes — wrong tool may be credited. | Rare in practice; visible in `RawNote` for forensic re-derivation. |
+| L3 | **100 % AI attribution can over-count when work happens entirely inside an integrated AI editor** | git-ai attributes by *who saved the bytes through an editor hook*, not by who originated the idea. Lines you guided keystroke-by-keystroke through Claude Code still tag as AI. | Upstream attribution-model trade-off, not a server bug. Calibrate expectations: the metric is "code authored through AI tooling", not "lines invented by AI". |
+| L4 | **Cursor + Codex coverage pending** | Currently those agents produce empty `prompts: {}` notes. | Tracked at git-ai [#1204](https://github.com/git-ai-project/git-ai/issues/1204); coverage activates automatically when the upstream fix lands. |
+
+---
+
+## 📎 Prototype attachment
+
+A working prototype implementation is attached to this page as **`prototype.zip`** — it contains the .NET ingest API, the MS SQL schema, the `enrich-and-post.sh` hook script, and the `setup.sh.tmpl` developer-side bootstrap. End-to-end validated locally and across multiple repos before this doc was written; treat it as a reference implementation rather than the v1 production codebase. See the deep-dive doc ([`ai-code-metrics-architecture.md`](./ai-code-metrics-architecture.md)) Section 10 for how to run it.
