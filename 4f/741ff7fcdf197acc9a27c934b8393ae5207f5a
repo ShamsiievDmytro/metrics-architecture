@@ -1,0 +1,31 @@
+docs/onboarding.md
+  01960bc9bdcaaa99 1,3-6,10,12-13,15,17,19,21,23-25,27,29,31,34,37,39-42,44,47-52,55,57,59,61,63-68,70,72,74,76,78-81,83-84,86-87,90,92-96,98,100,102,104,106-109,111,113-115,120,122,124,126-138,141,143,145,147-152,154,156,158-159,162,164,166-167,170,172-175,178,180,182,184-191,194,196-198,200,202,204-206,208,210,212,214,216-219,221,225,227-231,234,240,244,246-250,252,256,258-260
+api/Forge.Metrics.Api/Parsing/NoteParser.cs
+  01960bc9bdcaaa99 14-15
+scripts/enrich-and-post.sh
+  01960bc9bdcaaa99 7-14,27-31,33-37,39-46,48-55,58-93
+api/Forge.Metrics.Api/Endpoints/IngestEndpoints.cs
+  01960bc9bdcaaa99 17-21,44,68-78
+scripts/setup.sh.tmpl
+  01960bc9bdcaaa99 125-129,150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "4f741ff7fcdf197acc9a27c934b8393ae5207f5a",
+  "prompts": {
+    "01960bc9bdcaaa99": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d3487ea-9d3e-4a16-b2b3-0ca41c671cc2",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Dmytro Shamsiiev",
+      "messages": [],
+      "total_additions": 543,
+      "total_deletions": 808,
+      "accepted_lines": 370,
+      "overriden_lines": 0
+    }
+  }
+}
