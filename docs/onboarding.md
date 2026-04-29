@@ -45,7 +45,6 @@ You should see output ending with:
 
 ```
 [forge-ai] hook registered: ["/Users/<you>/.forge-ai/enrich-and-post.sh"]
-[forge-ai] git_hooks_enabled: true
 [forge-ai] async_mode:       true
 [forge-ai] prompt_storage:   "local"
 [forge-ai] config: /Users/<you>/.forge-ai/config.json
@@ -129,7 +128,6 @@ git-ai bg status                       # should print { "ok": true, ... }
 
 # 2. Hook + flags set?
 git-ai config git_ai_hooks.post_notes_updated   # should list your script
-git-ai config feature_flags.git_hooks_enabled   # → true
 git-ai config feature_flags.async_mode          # → true
 
 # 3. Did your commit have AI activity?

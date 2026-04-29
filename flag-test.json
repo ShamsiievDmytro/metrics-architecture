@@ -1,4 +1,0 @@
-{
-  "test": "verify git_hooks_enabled flag is irrelevant",
-  "value": 1
-}

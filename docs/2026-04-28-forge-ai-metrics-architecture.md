@@ -86,17 +86,18 @@ Plus two entries in **git-ai's own config** (`~/.git-ai/config.json`, NOT git's 
 
 ```bash
 git-ai config --add git_ai_hooks.post_notes_updated ~/.forge-ai/enrich-and-post.sh
-git-ai config set feature_flags.git_hooks_enabled true   # off by default in 1.3.4
 git-ai config set feature_flags.async_mode true          # pin: today's default, but insulate against future flips
 ```
 
-The `git_hooks_enabled` feature flag must be on or the hook is silently inert. `async_mode` pinning is what makes `post_notes_updated` dispatch reliably without blocking the commit — the setup script sets it explicitly so the pipeline doesn't drift if the upstream default changes.
+`async_mode` pinning is what makes `post_notes_updated` dispatch reliably without blocking the commit — the setup script sets it explicitly so the pipeline doesn't drift if the upstream default changes.
+
+**About `feature_flags.git_hooks_enabled` (do NOT set this).** The name is misleading. It controls git-ai's *native-git-hooks* subsystem (`git-ai install-hooks` + per-repo `.git/hooks/*` editor wrappers used by Cursor/JetBrains/etc.) — **not** the daemon's `git_ai_hooks.<event>` dispatch we rely on. Verified empirically 2026-04-29: with `git_hooks_enabled=false` and the daemon restarted, an AI-attributed commit still produced HTTP 200 ingest. Earlier iterations of this doc claimed it must be `true`; that was wrong, and the setup script no longer touches it.
 
 **Hook command shape.** `git_ai_hooks.<event>` is a `name → command(s)` map; the value can be a single string or an array of strings. Use `set` (overwrites) on re-runs rather than `--add` (appends, duplicates). The setup script `unset`s first defensively.
 
 ### Why the setup script restarts the daemon
 
-The git-ai background service reads `~/.git-ai/config.json` at startup and caches it in memory. Newly registered hooks (`git_ai_hooks.post_notes_updated`) and toggled feature flags (`feature_flags.git_hooks_enabled`) **do not take effect until the daemon restarts**. The setup script ends with `git-ai bg restart` for this reason. Skipping the restart is the most common cause of "the script ran but my hook never fires" — observed during validation on 2026-04-28.
+The git-ai background service reads `~/.git-ai/config.json` at startup and caches it in memory. Newly registered hooks (`git_ai_hooks.post_notes_updated`) and toggled feature flags (`feature_flags.async_mode`, etc.) **do not take effect until the daemon restarts**. The setup script ends with `git-ai bg restart` for this reason. Skipping the restart is the most common cause of "the script ran but my hook never fires" — observed during validation on 2026-04-28.
 
 ### How the hook is delivered (no per-repo install)
 
@@ -544,7 +545,7 @@ Captured here so the next person setting this up doesn't re-debug the same thing
 
 **9.5 Multi-agent conflict.** When multiple agents are active, the first agent's checkpoint claims file changes. Wrong tool may be credited.
 
-**9.6 `post_notes_updated` hook stability.** Not prominently documented by git-ai. Behavior may change in future versions. The enrichment script abstracts this — updates deploy via re-running the setup command. Also: the daemon caches `~/.git-ai/config.json` in memory at startup, so any change to `git_ai_hooks.*` or `feature_flags.git_hooks_enabled` requires a `git-ai bg restart` before it takes effect (the setup script does this automatically; manual edits do not).
+**9.6 `post_notes_updated` hook stability.** Not prominently documented by git-ai. Behavior may change in future versions. The enrichment script abstracts this — updates deploy via re-running the setup command. Also: the daemon caches `~/.git-ai/config.json` in memory at startup, so any change to `git_ai_hooks.*` or `feature_flags.*` requires a `git-ai bg restart` before it takes effect (the setup script does this automatically; manual edits do not).
 
 **9.7 3 retries, then data lost.** If the API is down for extended periods, commits during that time are not recovered. Acceptable for v1.
 
@@ -573,8 +574,7 @@ git-ai bg status
 
 # Hook + flags as configured?
 git-ai config git_ai_hooks.post_notes_updated
-git-ai config feature_flags.git_hooks_enabled       # → true
-git-ai config feature_flags.async_mode              # → true
+git-ai config feature_flags.async_mode              # → true (only flag we pin)
 git-ai config prompt_storage                        # → "local"
 
 # API reachable?
