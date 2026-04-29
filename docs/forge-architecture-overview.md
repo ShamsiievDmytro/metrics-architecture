@@ -20,8 +20,8 @@ We **bundle** local capture into our existing developer onboarding package, and 
 
 1. **Developer-side capture lives inside the WoD AI SSD setup package** — the same package developers already run for AI workflow setup. It now also installs/upgrades [git-ai](https://usegitai.com), registers a `post_notes_updated` hook, and writes the Forge AI Metrics config. **Zero new install steps for developers — it's part of the bundle.**
 2. **Local attribution via [git-ai](https://usegitai.com/docs/cli)'s daemon** — git-ai already attributes every commit to AI prompt IDs vs. human author IDs at line-range granularity. Our hook script reads its output, enriches with diff stats, and posts to the platform.
-3. **Ingest + read endpoints are extensions of the existing Forge API** — adds `/api/coding-metrics/ingest` and `/api/coding-metrics/*` read endpoints. Multi-tenancy support is being added to Forge API as a platform-level capability; this feature uses the same `X-API-Key` → `tenant_id` resolution.
-4. **Storage is an extension of the existing Forge DB** — one new `Commits` table; tenant resolution leans on the platform-level multi-tenancy work (we don't ship our own tenant table). Multi-tenant isolation enforced at the application layer (every query filters on `tenant_id`).
+3. **Ingest + read endpoints are extensions of the existing Forge API** — adds `/api/coding-metrics/ingest` and `/api/coding-metrics/*` read endpoints. Multi-tenancy support is being added to Forge API as a platform-level capability; this feature uses the same `X-API-Key` → `team_id` resolution.
+4. **Storage is an extension of the existing Forge DB** — one new `Commits` table; tenant resolution leans on the platform-level multi-tenancy work (we don't ship our own tenant table). Multi-tenant isolation enforced at the application layer (every query filters on `team_id`).
 5. **Visualization is an extension of the existing Forge metrics dashboard** — a new "Coding metrics" view next to existing dashboards. Same auth, same tenant scoping, same operational model.
 6. **End-to-end idempotent** — re-running the package is the upgrade path for everything (git-ai version, hook script, config drift, key rotation). 
 
@@ -34,23 +34,23 @@ Validated end-to-end across multiple repos in one chat session — three commits
 ```mermaid
 flowchart TB
     subgraph DIST["📦 Distribution"]
-        SSD["<b>WoD AI SSD setup package</b><br/>(internal + tenant developers)<br/>—<br/>installs git-ai · registers hook<br/>writes ~/.forge-ai/config.json"]
+        SSD["<b>WoD AI SSD setup package</b><br/>(internal + tenant developers)<br/>installs git-ai · registers hook<br/>activates on TEAM_ID + API_KEY config"]
     end
 
     subgraph DEV["💻 Developer machine"]
         direction TB
-        AGENT["<b>AI coding agent</b><br/>Claude · Copilot · Cursor<br/>Codex · Continue · …"]
+        AGENT["<b>AI coding agent</b><br/>Claude · Copilot · Continue · …"]
         GITAI["<b>git-ai daemon</b> (local)<br/>trace2 + checkpoints<br/>writes refs/notes/ai"]
-        HOOK["<b>enrich-and-post.sh</b><br/>post_notes_updated hook<br/>+ diff stats + committed_at<br/>+ retries with backoff"]
+        HOOK["<b>enrich-and-post.sh</b><br/>post_notes_updated hook<br/>+ diff stats + retries"]
         AGENT -- "edits files" --> GITAI
         GITAI -- "fires hook<br/>(JSON array)" --> HOOK
     end
 
     subgraph FORGE["☁️ Forge AI platform <i>(existing, extended)</i>"]
         direction TB
-        API["<b>Forge API</b><br/>+ /api/coding-metrics/ingest <i>(new)</i><br/>+ /api/coding-metrics/* read <i>(new)</i><br/>multi-tenancy: X-API-Key → tenant_id"]
+        API["<b>Forge API</b><br/>+ /api/coding-metrics/* <i>(new — ingest + read)</i><br/>multi-tenancy: X-API-Key → team_id"]
         DB[("<b>Forge DB</b> <i>(existing)</i><br/>+ Commits <i>(new table)</i>")]
-        UI["<b>Forge metrics dashboard</b> <i>(existing)</i><br/>+ Coding metrics view <i>(new)</i><br/>per-team · per-developer<br/>per-repo · per-agent"]
+        UI["<b>Forge metrics dashboard</b> <i>(existing)</i><br/>+ Coding metrics view <i>(new)</i><br/>per-team · per-developer · per-repo · per-agent"]
         API --> DB
         DB --> UI
     end
@@ -76,7 +76,7 @@ The three layers map to **distribution → capture → platform**, top-to-bottom
 2. Developer runs `git commit` → daemon writes a `refs/notes/ai` note containing the file map (line ranges per prompt or human ID) + a JSON section with prompt metadata (`agent_id.tool`, `agent_id.model`, `human_author`, `accepted_lines`, `overriden_lines`)
 3. Daemon dispatches `post_notes_updated` (JSON array of events) → our hook script
 4. Script enriches each event with `diff_additions`, `diff_deletions`, `committed_at`; POSTs to the new `/api/coding-metrics/ingest` endpoint on Forge API
-5. Forge API authenticates via `X-API-Key` → resolves `tenant_id` → parses note → computes `ai_lines / human_lines / agent / model / human_author / overridden_lines` → upserts on `(tenant_id, repo_name, commit_sha)` into the new `Commits` table in Forge DB
+5. Forge API authenticates via `X-API-Key` → resolves `team_id` → parses note → computes `ai_lines / human_lines / agent / model / human_author / overridden_lines` → upserts on `(team_id, repo_name, commit_sha)` into the new `Commits` table in Forge DB
 6. Forge dashboard's new "Coding metrics" view queries the same Forge DB; data appears within ~3 seconds of commit
 
 **Failure-mode policy:**
@@ -102,7 +102,7 @@ What ends up on the developer's machine after the WoD AI SSD package runs (or af
     └── logs/<pid>.log                   structured daemon log
 
 ~/.forge-ai/                             ← our package adds these
-├── config.json                          tenant config (api_url, api_key, tenant_id, project_root)
+├── config.json                          tenant config (api_url, api_key, team_id, project_root)
 ├── enrich-and-post.sh                   the post_notes_updated hook script
 ├── last-run.log                         stderr from each hook run (diagnosis)
 └── last-payload.json                    most recent raw daemon payload (diagnosis)
@@ -141,7 +141,7 @@ What ends up on the developer's machine after the WoD AI SSD package runs (or af
 
 | Input | Source | Stored in |
 |---|---|---|
-| `TENANT_ID` | Forge AI Admin → tenant lead | `~/.forge-ai/config.json` |
+| `TEAM_ID` | Forge AI Admin → tenant lead | `~/.forge-ai/config.json` |
 | `API_KEY` (e.g. `acme_<random>`) | Forge AI Admin → tenant lead | `~/.forge-ai/config.json` *(plain text locally; hashed server-side)* |
 | `api_url` | Package default per environment | `~/.forge-ai/config.json` |
 | `project_root` | Auto-detected (`~/Projects` → `~/Code` → `~/work` → `~/src` → `~/dev`); override with `FORGE_PROJECT_ROOT=...` | `~/.forge-ai/config.json` |
@@ -161,7 +161,7 @@ The two diagnostic files (`last-run.log`, `last-payload.json`) are the only wind
 | Author name (extracted from git-ai note) | SCM credentials |
 | Line counts + diff stats (counts only) | Anything outside the metadata above |
 
-**Tenant isolation:** every row stamped with `tenant_id`; every query filters on it; the API key resolves to exactly one tenant. Same pattern Forge platform uses for other multi-tenant endpoints.
+**Tenant isolation:** every row stamped with `team_id`; every query filters on it; the API key resolves to exactly one tenant. Same pattern Forge platform uses for other multi-tenant endpoints.
 
 ---
 
@@ -173,19 +173,19 @@ Concrete additions to the existing platform — kept deliberately small.
 
 Whichever process Forge already uses to provision a multi-tenant client yields the two values we need:
 
-- `TENANT_ID` — opaque identifier (UUID) that scopes every metrics row
-- `API_KEY` — secret string the developer's machine sends as `X-API-Key`; the Forge platform hashes and resolves it back to one `TENANT_ID`
+- `TEAM_ID` — opaque identifier (UUID) that scopes every metrics row
+- `API_KEY` — secret string the developer's machine sends as `X-API-Key`; the Forge platform hashes and resolves it back to one `TEAM_ID`
 
 This document **does not** specify how those are minted, stored, or rotated — that's the responsibility of the platform-level multi-tenancy work happening in parallel. We just consume the result.
 
 ### New `Commits` table in Forge DB
 
-One new table holds every ingested commit. Every row is stamped with `tenant_id`; every read filters on it.
+One new table holds every ingested commit. Every row is stamped with `team_id`; every read filters on it.
 
 | Column | Type | Notes |
 |---|---|---|
 | `Id` | UUID (PK) | Server-generated row id |
-| `TenantId` | UUID | Resolved from `X-API-Key` on every ingest. Foreign-keys into the platform-level tenancy table. |
+| `TeamId` | UUID | Resolved from `X-API-Key` on every ingest. Foreign-keys into the platform-level tenancy table. |
 | `RepoName` | string | E.g. `gitai-service-b` |
 | `RepoUrl` | string · nullable | E.g. `https://github.com/.../gitai-service-b.git` |
 | `CommitSha` | string(40) | Full SHA |
@@ -204,7 +204,7 @@ One new table holds every ingested commit. Every row is stamped with `tenant_id`
 | `IngestedAt` | timestamp | Server-set on insert |
 | `RawNote` | text | Verbatim git-ai note — kept for replay if the parser changes |
 
-**Idempotency key:** `UNIQUE(TenantId, RepoName, CommitSha)`. Re-submitting the same commit (retries, daemon re-emits, post-rebase rewrites) upserts safely — no duplicates.
+**Idempotency key:** `UNIQUE(TeamId, RepoName, CommitSha)`. Re-submitting the same commit (retries, daemon re-emits, post-rebase rewrites) upserts safely — no duplicates.
 
 ### New Forge API endpoints
 
@@ -216,7 +216,7 @@ One new table holds every ingested commit. Every row is stamped with `tenant_id`
 | `GET` | `/api/coding-metrics/by-developer?period=30d` | Per author leaderboard | `[{author, commits, ai_percentage, ai_lines}]` |
 | `GET` | `/api/coding-metrics/by-repo?period=30d` | Per repo breakdown | `[{repo_name, commits, ai_percentage, ai_lines}]` |
 
-All endpoints require `X-API-Key` (resolves to a single `TenantId`); period accepts `7d` / `30d` / `90d` / custom range. Reads use `CommittedAt` (actual commit time), not `IngestedAt`, so time-series charts reflect when work happened.
+All endpoints require `X-API-Key` (resolves to a single `TeamId`); period accepts `7d` / `30d` / `90d` / custom range. Reads use `CommittedAt` (actual commit time), not `IngestedAt`, so time-series charts reflect when work happened.
 
 ---
 
@@ -227,19 +227,25 @@ The metrics-collection logic ships **inside** the WoD AI SSD package — no exte
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Admin as Forge AI Admin
-    participant Lead as Tenant team lead
-    participant Devs as Tenant developers<br/>(WoD AI SSD installed)
+    actor Admin as Forge AI Admin
+    actor Lead as Tenant team lead
+    actor Devs as Tenant developers<br/>(WoD AI SSD installed)
     participant Forge as Forge API + DB
     participant UI as Forge dashboard
 
-    Admin->>Forge: Provision tenant<br/>(existing platform process)<br/>→ TENANT_ID + API_KEY
+    Admin->>Forge: Provision tenant<br/>(existing platform process)<br/>→ TEAM_ID + API_KEY
     Admin->>Lead: Send TEAM_ID + API_KEY<br/>(secure channel)
     Lead->>Devs: Distribute TEAM_ID + API_KEY<br/>(Slack / email / wiki)
-    Devs->>Devs: Configure WoD AI SSD package<br/>(env var / config file / CLI flag)<br/>idempotent, ~30 seconds
-    Note over Devs: Package activates the metrics hook:<br/>writes ~/.forge-ai/config.json<br/>registers post_notes_updated<br/>restarts git-ai daemon
-    Devs->>Forge: First AI commit auto-ingests<br/>via post_notes_updated hook
-    UI->>Forge: Lead opens "Coding metrics" view,<br/>tenant-scoped data is live
+    Devs->>Devs: Configure WoD AI SSD with TEAM_ID + API_KEY<br/>(env var / config / CLI flag) — ~30s, idempotent
+    Devs->>Devs: Package activates metrics hook
+    Note over Devs: writes ~/.forge-ai/config.json<br/>registers post_notes_updated<br/>restarts git-ai daemon
+    loop every AI commit
+        Devs->>Forge: POST /api/coding-metrics/ingest<br/>(metadata only)
+        Forge-->>Devs: 200 OK
+    end
+    Lead->>UI: Open "Coding metrics" view
+    UI->>Forge: Query metrics (tenant-scoped by TEAM_ID)
+    Forge-->>UI: Per-team / dev / repo / agent rollups
 ```
 
 **Total time admin → first data**: ~10 minutes (admin work) + ~30 seconds per developer (just configuring the key — package is already installed) + the next AI commit. Existing tenants already running the WoD AI SSD package only need to apply their tenant key — no re-install.
