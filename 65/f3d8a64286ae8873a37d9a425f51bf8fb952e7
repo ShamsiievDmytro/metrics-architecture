@@ -1,0 +1,23 @@
+docs/forge-architecture-1pager.md
+  01960bc9bdcaaa99 1-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "65f3d8a64286ae8873a37d9a425f51bf8fb952e7",
+  "prompts": {
+    "01960bc9bdcaaa99": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d3487ea-9d3e-4a16-b2b3-0ca41c671cc2",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Dmytro Shamsiiev",
+      "messages": [],
+      "total_additions": 59,
+      "total_deletions": 0,
+      "accepted_lines": 59,
+      "overriden_lines": 0
+    }
+  }
+}
